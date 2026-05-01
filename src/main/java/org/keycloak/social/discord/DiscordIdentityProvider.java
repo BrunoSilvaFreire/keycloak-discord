@@ -18,6 +18,7 @@
 package org.keycloak.social.discord;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.ws.rs.core.Response;
 import org.jboss.logging.Logger;
 import org.keycloak.broker.oidc.AbstractOAuth2IdentityProvider;
@@ -47,6 +48,7 @@ public class DiscordIdentityProvider extends AbstractOAuth2IdentityProvider<Disc
     public static final String GROUP_URL = "https://discord.com/api/users/@me/guilds";
     public static final String DEFAULT_SCOPE = "identify email";
     public static final String GUILDS_SCOPE = "guilds";
+    private static final String AVATAR_URL_FORMAT = "https://cdn.discordapp.com/avatars/%s/%s.%s";
 
     public DiscordIdentityProvider(KeycloakSession session, DiscordIdentityProviderConfig config) {
         super(session, config);
@@ -78,7 +80,14 @@ public class DiscordIdentityProvider extends AbstractOAuth2IdentityProvider<Disc
 
         user.setUsername(username);
         user.setEmail(getJsonProperty(profile, "email"));
-        user.setIdp(this);
+
+        String avatarUrl = getAvatarUrl(profile);
+        if (avatarUrl != null) {
+            user.setUserAttribute("picture", avatarUrl);
+            if (profile instanceof ObjectNode objectProfile) {
+                objectProfile.put("picture", avatarUrl);
+            }
+        }
 
         AbstractJsonUserAttributeMapper.storeUserProfileForMapper(user, profile, getConfig().getAlias());
 
@@ -126,5 +135,17 @@ public class DiscordIdentityProvider extends AbstractOAuth2IdentityProvider<Disc
         } else {
             return DEFAULT_SCOPE;
         }
+    }
+
+    private String getAvatarUrl(JsonNode profile) {
+        String userId = getJsonProperty(profile, "id");
+        String avatar = getJsonProperty(profile, "avatar");
+
+        if (userId == null || avatar == null || avatar.isBlank()) {
+            return null;
+        }
+
+        String extension = avatar.startsWith("a_") ? "gif" : "png";
+        return String.format(AVATAR_URL_FORMAT, userId, avatar, extension);
     }
 }
